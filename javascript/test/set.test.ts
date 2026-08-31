@@ -18,9 +18,29 @@
  */
 
 import Fory, { Type } from "../packages/core/index";
+import { BinaryReader } from "../packages/core/lib/reader";
+import { ConfigFlags, RefFlags, TypeId } from "../packages/core/lib/type";
 import { describe, expect, test } from "@jest/globals";
 
 describe("set", () => {
+  test("writes registered typed roots with inline element type info", () => {
+    const writer = new Fory({ compatible: false, ref: false });
+    const registration = writer.register(Type.set(Type.int32({ encoding: "fixed" })));
+    const value = new Set([1, 2, 3]);
+    const bytes = registration.serialize(value);
+    const reader = new BinaryReader({});
+    reader.reset(bytes);
+    expect(reader.readUint8()).toBe(ConfigFlags.isCrossLanguageFlag);
+    expect(reader.readInt8()).toBe(RefFlags.NotNullValueFlag);
+    expect(reader.readUint8()).toBe(TypeId.SET);
+    expect(reader.readVarUint32Small7()).toBe(value.size);
+    expect(reader.readUint8() & 0b1100).toBe(0b1000);
+    expect(reader.readUint8()).toBe(TypeId.INT32);
+
+    expect(new Fory({ compatible: false, ref: false }).deserialize(bytes)).toEqual(value);
+    expect(registration.deserialize(writer.serialize(value))).toEqual(value);
+  });
+
   test("should set work", () => {
     const fory = new Fory({ compatible: false, ref: true });
     const input = fory.serialize(new Set(["foo1", "bar1", "cc2"]));

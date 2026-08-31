@@ -148,6 +148,7 @@ export default class Fory {
   };
   register(constructor: any, customSerializer?: CustomSerializer<any>) {
     let serializer: Serializer;
+    let rootContainer = false;
     if (constructor.prototype?.[ForyTypeInfoSymbol]) {
       const typeInfo: TypeInfo = (constructor.prototype[ForyTypeInfoSymbol] as WithForyClsInfo)
         .structTypeInfo;
@@ -160,10 +161,15 @@ export default class Fory {
     } else {
       const typeInfo = constructor;
       typeInfo.freeze();
-      serializer = new Gen(this.typeResolver, {
-        customSerializer,
-      }).generateSerializer(typeInfo);
-      this.typeResolver.registerSerializer(typeInfo, serializer);
+      rootContainer = [TypeId.LIST, TypeId.SET, TypeId.MAP].includes(typeInfo.typeId);
+      serializer = new Gen(
+        this.typeResolver,
+        { customSerializer },
+        rootContainer,
+      ).generateSerializer(typeInfo);
+      if (!rootContainer) {
+        this.typeResolver.registerSerializer(typeInfo, serializer);
+      }
     }
     return {
       serializer,

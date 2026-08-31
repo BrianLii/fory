@@ -19,6 +19,7 @@
 
 import { Scope } from "./scope";
 import TypeResolver from "../typeResolver";
+import type { TypeInfo } from "../typeInfo";
 
 export class BinaryReaderBuilder {
   constructor(private holder: string) {}
@@ -426,6 +427,7 @@ export class CodecBuilder {
   constructor(
     scope: Scope,
     readonly resolver: TypeResolver,
+    readonly rootTypeInfo?: TypeInfo,
   ) {
     const writeContext = scope.declareByName("writeContext", "typeResolver.writeContext");
     const readContext = scope.declareByName("readContext", "typeResolver.readContext");

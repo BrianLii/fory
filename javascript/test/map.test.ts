@@ -58,6 +58,48 @@ function structMapHeader(fory: Fory, bytes: Uint8Array, compatible: boolean, wra
 }
 
 describe("map", () => {
+  test("writes registered typed roots with inline key and value type info", () => {
+    const writer = new Fory({ compatible: false, ref: false });
+    const registration = writer.register(
+      Type.map(Type.int32({ encoding: "fixed" }), Type.int32({ encoding: "fixed" })),
+    );
+    const value = new Map<number | null, number | null>([
+      [1, 2],
+      [3, 4],
+      [5, null],
+      [null, 6],
+    ]);
+    const bytes = registration.serialize(value);
+    const reader = new BinaryReader({});
+    reader.reset(bytes);
+    expect(reader.readUint8()).toBe(ConfigFlags.isCrossLanguageFlag);
+    expect(reader.readInt8()).toBe(RefFlags.NotNullValueFlag);
+    expect(reader.readUint8()).toBe(TypeId.MAP);
+    expect(reader.readVarUint32Small7()).toBe(value.size);
+    const header = reader.readUint8();
+    expect(header & 0b100100).toBe(0);
+    expect(reader.readUint8()).toBe(2);
+    expect(reader.readUint8()).toBe(TypeId.INT32);
+    expect(reader.readUint8()).toBe(TypeId.INT32);
+
+    expect(new Fory({ compatible: false, ref: false }).deserialize(bytes)).toEqual(value);
+    expect(registration.deserialize(writer.serialize(value))).toEqual(value);
+    expect(writer.serialize(value, registration.serializer)).toEqual(bytes);
+  });
+
+  test("writes typed root maps across chunks", () => {
+    const writer = new Fory({ compatible: false, ref: false });
+    const registration = writer.register(
+      Type.map(Type.int32({ encoding: "fixed" }), Type.int32({ encoding: "fixed" })),
+    );
+    const value = new Map<number, number>();
+    for (let index = 0; index < 300; index++) {
+      value.set(index, index + 1);
+    }
+    const bytes = registration.serialize(value);
+    expect(new Fory({ compatible: false, ref: false }).deserialize(bytes)).toEqual(value);
+  });
+
   test("should map work", () => {
     const fory = new Fory({ compatible: false, ref: true });
     const input = fory.serialize(

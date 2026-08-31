@@ -413,16 +413,36 @@ export class MapSerializerGenerator extends BaseSerializerGenerator {
   private writeSpecificType(accessor: string) {
     const k = this.scope.uniqueName("k");
     const v = this.scope.uniqueName("v");
+    const rootContainer = this.builder.rootTypeInfo !== undefined;
     let keyHeader = this.keyGenerator.needToWriteRef() ? MapFlags.TRACKING_REF : 0;
-    keyHeader |= MapFlags.DECL_ELEMENT_TYPE;
+    if (!rootContainer) {
+      keyHeader |= MapFlags.DECL_ELEMENT_TYPE;
+    }
     let valueHeader = this.valueGenerator.needToWriteRef() ? MapFlags.TRACKING_REF : 0;
-    valueHeader |= MapFlags.DECL_ELEMENT_TYPE;
+    if (!rootContainer) {
+      valueHeader |= MapFlags.DECL_ELEMENT_TYPE;
+    }
     const lastKeyIsNull = this.scope.uniqueName("lastKeyIsNull");
     const lastValueIsNull = this.scope.uniqueName("lastValueIsNull");
     const chunkSize = this.scope.uniqueName("chunkSize");
     const chunkSizeOffset = this.scope.uniqueName("chunkSizeOffset");
     const keyRef = this.scope.uniqueName("keyRef");
     const valueRef = this.scope.uniqueName("valueRef");
+    const chunkHasNull = this.scope.uniqueName("chunkHasNull");
+    const writeTypeInfo = rootContainer
+      ? `
+          if (!${chunkHasNull}) {
+            ${this.keyGenerator.writeEmbed().writeTypeInfo("null")}
+            ${this.valueGenerator.writeEmbed().writeTypeInfo("null")}
+          }
+        `
+      : "";
+    const writeKeyTypeInfo = rootContainer
+      ? `if (${chunkHasNull}) { ${this.keyGenerator.writeEmbed().writeTypeInfo("null")} }`
+      : "";
+    const writeValueTypeInfo = rootContainer
+      ? `if (${chunkHasNull}) { ${this.valueGenerator.writeEmbed().writeTypeInfo("null")} }`
+      : "";
 
     return `
       ${this.builder.writer.writeVarUint32Small7(`${accessor}.size`)}
@@ -437,6 +457,7 @@ export class MapSerializerGenerator extends BaseSerializerGenerator {
       for (const [${k}, ${v}] of ${accessor}.entries()) {
         let keyIsNull = ${k} === null || ${k} === undefined;
         let valueIsNull = ${v} === null || ${v} === undefined;
+        const ${chunkHasNull} = keyIsNull || valueIsNull;
         if (${lastKeyIsNull} !== keyIsNull || ${lastValueIsNull} !== valueIsNull || ${chunkSize} === 0 || ${chunkSize} === 255 || keyIsNull || valueIsNull) {
           if (${chunkSize} > 0) {
             ${this.builder.writer.setUint8Position(`${chunkSizeOffset}`, chunkSize)};
@@ -454,6 +475,7 @@ export class MapSerializerGenerator extends BaseSerializerGenerator {
           }
           ${lastKeyIsNull} = keyIsNull;
           ${lastValueIsNull} = valueIsNull;
+          ${writeTypeInfo}
         }
         if (!keyIsNull) {
           ${
@@ -466,10 +488,11 @@ export class MapSerializerGenerator extends BaseSerializerGenerator {
               } else {
                 ${this.builder.writer.writeInt8(RefFlags.RefValueFlag)};
                 ${this.builder.referenceResolver.writeRef(k)}
+                ${writeKeyTypeInfo}
                 ${this.keyGenerator.writeEmbed().write(k)}
               }
           `
-              : this.keyGenerator.writeEmbed().write(k)
+              : `${writeKeyTypeInfo}\n${this.keyGenerator.writeEmbed().write(k)}`
           }
         }
 
@@ -484,10 +507,11 @@ export class MapSerializerGenerator extends BaseSerializerGenerator {
               } else {
                 ${this.builder.writer.writeInt8(RefFlags.RefValueFlag)};
                 ${this.builder.referenceResolver.writeRef(v)}
+                ${writeValueTypeInfo}
                 ${this.valueGenerator.writeEmbed().write(v)};
               }
           `
-              : this.valueGenerator.writeEmbed().write(v)
+              : `${writeValueTypeInfo}\n${this.valueGenerator.writeEmbed().write(v)}`
           }
         }
         if (!keyIsNull && !valueIsNull) {
@@ -524,9 +548,15 @@ export class MapSerializerGenerator extends BaseSerializerGenerator {
       this.typeInfo.options!.value!.typeId !== TypeId.UNKNOWN
         ? innerSerializer(this.typeInfo.options!.value!)
         : null
-    }).write(${accessor}, ${this.useDeclaredType(
-      this.typeInfo.options!.key!,
-    )}, ${this.useDeclaredType(this.typeInfo.options!.value!)})`;
+    }).write(${accessor}, ${
+      this.builder.rootTypeInfo !== undefined
+        ? false
+        : this.useDeclaredType(this.typeInfo.options!.key!)
+    }, ${
+      this.builder.rootTypeInfo !== undefined
+        ? false
+        : this.useDeclaredType(this.typeInfo.options!.value!)
+    })`;
   }
 
   private readSpecificType(accessor: (expr: string) => string, refState: string) {

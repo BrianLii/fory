@@ -24,11 +24,59 @@ import Fory, {
   Float16Array,
   ForyFloat16Array,
 } from "../packages/core/index";
-import { TypeId } from "../packages/core/lib/type";
+import { ConfigFlags, RefFlags, TypeId } from "../packages/core/lib/type";
+import { BinaryReader } from "../packages/core/lib/reader";
 import { describe, expect, test } from "@jest/globals";
 import * as beautify from "js-beautify";
 
 describe("array", () => {
+  test("writes registered typed roots with inline element type info", () => {
+    const writer = new Fory({ compatible: false, ref: false });
+    const registration = writer.register(Type.list(Type.int32({ encoding: "fixed" })));
+    const value = [1, 2, 3];
+    const bytes = registration.serialize(value);
+    const reader = new BinaryReader({});
+    reader.reset(bytes);
+    expect(reader.readUint8()).toBe(ConfigFlags.isCrossLanguageFlag);
+    expect(reader.readInt8()).toBe(RefFlags.NotNullValueFlag);
+    expect(reader.readUint8()).toBe(TypeId.LIST);
+    expect(reader.readVarUint32Small7()).toBe(value.length);
+    expect(reader.readUint8() & 0b1100).toBe(0b1000);
+    expect(reader.readUint8()).toBe(TypeId.INT32);
+
+    expect(new Fory({ compatible: false, ref: false }).deserialize(bytes)).toEqual(value);
+    expect(registration.deserialize(writer.serialize(value))).toEqual(value);
+    expect(writer.serialize(value, registration.serializer)).toEqual(bytes);
+
+    const dynamicBytes = new Fory({ compatible: false, ref: false }).serialize(value);
+    expect(registration.deserialize(dynamicBytes)).toEqual(value);
+  });
+
+  test("keeps dynamic root lists dynamic after typed registration", () => {
+    const fory = new Fory({ compatible: false, ref: false });
+    fory.register(Type.list(Type.int32({ encoding: "fixed" })));
+    const bytes = fory.serialize([1]);
+    const reader = new BinaryReader({});
+    reader.reset(bytes);
+    reader.readUint8();
+    reader.readInt8();
+    reader.readUint8();
+    reader.readVarUint32Small7();
+    reader.readUint8();
+    expect(reader.readUint8()).toBe(TypeId.VARINT32);
+  });
+
+  test("keeps nested typed collection fields declared", () => {
+    const writer = new Fory({ compatible: false, ref: true });
+    const registration = writer.register(Type.list(Type.list(Type.int32({ encoding: "fixed" }))));
+    const shared = [1, 2];
+    const value = [shared, shared];
+    const bytes = registration.serialize(value);
+    const result = new Fory({ compatible: false, ref: true }).deserialize(bytes) as number[][];
+    expect(result).toEqual(value);
+    expect(result[0]).toBe(result[1]);
+  });
+
   test("should distinguish list and dense array schema builders", () => {
     expect(Type.list(Type.int32()).typeId).toBe(TypeId.LIST);
     expect(Type.int32Array().typeId).toBe(TypeId.INT32_ARRAY);

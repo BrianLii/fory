@@ -542,9 +542,10 @@ export abstract class CollectionSerializerGenerator extends BaseSerializerGenera
     const item = this.scope.uniqueName("item");
     const flags = this.scope.uniqueName("flags");
     const existsId = this.scope.uniqueName("existsId");
-    const flag = this.isDeclaredElementType()
-      ? CollectionFlags.SAME_TYPE | CollectionFlags.DECL_ELEMENT_TYPE
-      : CollectionFlags.SAME_TYPE;
+    const flag =
+      this.builder.rootTypeInfo === undefined && this.isDeclaredElementType()
+        ? CollectionFlags.SAME_TYPE | CollectionFlags.DECL_ELEMENT_TYPE
+        : CollectionFlags.SAME_TYPE;
     return `
             let ${flags} = ${(this.innerGenerator.needToWriteRef() ? CollectionFlags.TRACKING_REF : 0) | flag};
             ${this.builder.writer.writeVarUint32Small7(`${accessor}.${this.sizeProp()}`)}

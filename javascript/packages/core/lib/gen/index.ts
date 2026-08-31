@@ -65,6 +65,7 @@ export class Gen {
   constructor(
     private typeResolver: TypeResolver,
     private regOptions: { [key: string]: any } = {},
+    private rootContainer = false,
   ) {}
 
   private generate(typeInfo: TypeInfo): Serializer {
@@ -75,7 +76,7 @@ export class Gen {
     const scope = new Scope();
     const generator = new InnerGeneratorClass(
       typeInfo,
-      new CodecBuilder(scope, this.typeResolver),
+      new CodecBuilder(scope, this.typeResolver, this.rootContainer ? typeInfo : undefined),
       scope,
     );
 
@@ -175,6 +176,9 @@ export class Gen {
 
   generateSerializer(typeInfo: TypeInfo) {
     this.traversalContainer(typeInfo);
+    if (this.rootContainer) {
+      return this.reGenerateSerializer(typeInfo);
+    }
     const serializer = this.typeResolver.getSerializerByTypeInfo(typeInfo);
     if (serializer?._initialized) {
       return serializer;
